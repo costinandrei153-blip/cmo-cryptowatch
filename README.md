@@ -2,7 +2,7 @@
 
 Aplicație Android pentru urmărirea criptomonedelor: prețuri actuale, detalii despre fiecare monedă și o listă personală de favorite salvată pe dispozitiv.
 
-Proiect de semestru la disciplina Calcul mobil. Temă aleasă: **Investments**.
+ Temă aleasă: **Investments**.
 
 > Aplicația are scop educativ și nu oferă sfaturi de investiții.
 
