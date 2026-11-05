@@ -11,6 +11,8 @@ Aplicație Android pentru urmărirea criptomonedelor: prețuri actuale, detalii 
 | Membru | Rol principal |
 |---|---|
 | Costin Andrei | Dezvoltare Android (toate componentele) |
+| Nichita Daniel | Serif |
+
 
 ## Obiective
 
