@@ -56,3 +56,6 @@ Cheia API nu se include niciodată în repository.
 ## Organizarea muncii
 
 Sarcinile sunt gestionate în GitHub Projects, cu responsabil și stare (de făcut / în lucru
+
+## Utilizarea AI
+- C2: structura ecranelor (listă, detaliu) și a navigării generată cu Claude; am verificat codul rând cu rând, l-am rulat pe emulator și am adaptat pachetul și dependențele proiectului.
