@@ -19,18 +19,12 @@ class CryptoViewModel(private val repository: CryptoRepository) : ViewModel() {
         )
 
     init {
-        insertMockData()
+        fetchDataFromApi()
     }
 
-    private fun insertMockData() {
+    private fun fetchDataFromApi() {
         viewModelScope.launch {
-            val mockData = listOf(
-                CryptoEntity("bitcoin", "Bitcoin", "BTC", 64000.0, 1.5),
-                CryptoEntity("ethereum", "Ethereum", "ETH", 3450.0, -0.8),
-                CryptoEntity("solana", "Solana", "SOL", 145.0, 5.2, true),
-                CryptoEntity("cardano", "Cardano", "ADA", 0.45, 0.1)
-            )
-            repository.cacheCryptos(mockData)
+            repository.refreshDataFromApi()
         }
     }
 
