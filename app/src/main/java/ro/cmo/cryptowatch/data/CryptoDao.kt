@@ -14,6 +14,9 @@ interface CryptoDao {
     @Query("SELECT * FROM crypto_table WHERE isFavorite = 1")
     fun getFavorites(): Flow<List<CryptoEntity>>
 
+    @Query("SELECT id FROM crypto_table WHERE isFavorite = 1")
+    suspend fun getFavoriteIds(): List<String>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertCryptos(cryptos: List<CryptoEntity>)
 
