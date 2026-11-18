@@ -1,8 +1,8 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
-    id("org.jetbrains.kotlin.android") // Adăugat pentru suportul Kotlin
-    id("com.google.devtools.ksp") // Adăugat pentru procesarea Room
+    id("org.jetbrains.kotlin.android") 
+    id("com.google.devtools.ksp") 
 }
 
 android {
