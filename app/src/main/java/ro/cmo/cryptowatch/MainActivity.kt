@@ -69,7 +69,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val database = CryptoDatabase.getDatabase(this)
-        val repository = CryptoRepository(database.cryptoDao())
+        val repository = CryptoRepository(database.cryptoDao(), database.portfolioDao())
         val factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T = CryptoViewModel(repository) as T
