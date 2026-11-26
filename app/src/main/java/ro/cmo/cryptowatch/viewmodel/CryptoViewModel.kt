@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import ro.cmo.cryptowatch.data.CryptoEntity
 import ro.cmo.cryptowatch.data.CryptoRepository
+import ro.cmo.cryptowatch.network.PricePoint
 import java.io.IOException
 
 class CryptoViewModel(private val repository: CryptoRepository) : ViewModel() {
@@ -27,6 +28,18 @@ class CryptoViewModel(private val repository: CryptoRepository) : ViewModel() {
 
     private val _lastUpdated = MutableStateFlow<Long?>(null)
     val lastUpdated: StateFlow<Long?> = _lastUpdated.asStateFlow()
+
+    private val _chartPoints = MutableStateFlow<List<PricePoint>>(emptyList())
+    val chartPoints: StateFlow<List<PricePoint>> = _chartPoints.asStateFlow()
+
+    private val _chartLoading = MutableStateFlow(false)
+    val chartLoading: StateFlow<Boolean> = _chartLoading.asStateFlow()
+
+    private val _chartError = MutableStateFlow<String?>(null)
+    val chartError: StateFlow<String?> = _chartError.asStateFlow()
+
+    private val _selectedChartDays = MutableStateFlow(1)
+    val selectedChartDays: StateFlow<Int> = _selectedChartDays.asStateFlow()
 
     init { refreshData() }
 
@@ -46,6 +59,29 @@ class CryptoViewModel(private val repository: CryptoRepository) : ViewModel() {
                 }
             } finally {
                 _isLoading.value = false
+            }
+        }
+    }
+
+    fun loadPriceHistory(coinId: String, days: Int = _selectedChartDays.value) {
+        _selectedChartDays.value = days
+        viewModelScope.launch {
+            _chartLoading.value = true
+            _chartError.value = null
+            try {
+                _chartPoints.value = repository.getPriceHistory(coinId, days)
+                if (_chartPoints.value.isEmpty()) {
+                    _chartError.value = "Nu există date istorice disponibile pentru această perioadă."
+                }
+            } catch (exception: Exception) {
+                _chartError.value = when (exception) {
+                    is IOException -> "Nu am putut încărca graficul. Verifică internetul."
+                    else -> exception.message?.takeIf { it.isNotBlank() }
+                        ?: "Graficul nu este disponibil momentan."
+                }
+                _chartPoints.value = emptyList()
+            } finally {
+                _chartLoading.value = false
             }
         }
     }
