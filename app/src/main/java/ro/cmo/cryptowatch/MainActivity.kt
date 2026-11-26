@@ -1,5 +1,8 @@
 package ro.cmo.cryptowatch
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -68,8 +71,13 @@ fun changeColor(value: Double): Color = if (value >= 0) Green else Red
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1001)
+        }
         val database = CryptoDatabase.getDatabase(this)
-        val repository = CryptoRepository(database.cryptoDao(), database.portfolioDao())
+        val repository = CryptoRepository(applicationContext, database.cryptoDao(), database.portfolioDao())
         val factory = object : ViewModelProvider.Factory {
             @Suppress("UNCHECKED_CAST")
             override fun <T : ViewModel> create(modelClass: Class<T>): T = CryptoViewModel(repository) as T
