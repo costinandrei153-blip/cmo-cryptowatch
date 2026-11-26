@@ -3,6 +3,7 @@ package ro.cmo.cryptowatch
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -20,7 +21,9 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
@@ -34,6 +37,7 @@ import androidx.navigation.navArgument
 import ro.cmo.cryptowatch.data.CryptoDatabase
 import ro.cmo.cryptowatch.data.CryptoEntity
 import ro.cmo.cryptowatch.data.CryptoRepository
+import ro.cmo.cryptowatch.network.PricePoint
 import ro.cmo.cryptowatch.viewmodel.CryptoViewModel
 import java.util.Locale
 
@@ -49,6 +53,15 @@ fun usd(value: Double): String = if (value >= 1.0) {
 } else {
     "$" + String.format(Locale.US, "%.8f", value).trimEnd('0').trimEnd('.')
 }
+fun compactUsd(value: Double?): String = value?.let {
+    when {
+        it >= 1_000_000_000_000 -> "$" + String.format(Locale.US, "%.2fT", it / 1_000_000_000_000)
+        it >= 1_000_000_000 -> "$" + String.format(Locale.US, "%.2fB", it / 1_000_000_000)
+        it >= 1_000_000 -> "$" + String.format(Locale.US, "%.2fM", it / 1_000_000)
+        it >= 1_000 -> "$" + String.format(Locale.US, "%.2fK", it / 1_000)
+        else -> usd(it)
+    }
+} ?: "N/A"
 fun pct(value: Double): String = String.format(Locale.US, "%+.2f%%", value)
 fun changeColor(value: Double): Color = if (value >= 0) Green else Red
 
@@ -79,6 +92,10 @@ fun CryptoWatchApp(viewModel: CryptoViewModel) {
     val favorites by viewModel.favoriteList.collectAsState()
     val loading by viewModel.isLoading.collectAsState()
     val error by viewModel.errorMessage.collectAsState()
+    val chartPoints by viewModel.chartPoints.collectAsState()
+    val chartLoading by viewModel.chartLoading.collectAsState()
+    val chartError by viewModel.chartError.collectAsState()
+    val selectedDays by viewModel.selectedChartDays.collectAsState()
 
     NavHost(navController = nav, startDestination = "home") {
         composable("home") {
@@ -88,7 +105,17 @@ fun CryptoWatchApp(viewModel: CryptoViewModel) {
         composable("detail/{coinId}", arguments = listOf(navArgument("coinId") { type = NavType.StringType })) { entry ->
             val coin = coins.firstOrNull { it.id == entry.arguments?.getString("coinId") }
             if (coin != null) {
-                DetailScreen(coin, { nav.popBackStack() }, { viewModel.onFavoriteClick(coin) })
+                LaunchedEffect(coin.id) { viewModel.loadPriceHistory(coin.id, 1) }
+                DetailScreen(
+                    coin = coin,
+                    points = chartPoints,
+                    chartLoading = chartLoading,
+                    chartError = chartError,
+                    selectedDays = selectedDays,
+                    onPeriodSelected = { days -> viewModel.loadPriceHistory(coin.id, days) },
+                    onBack = { nav.popBackStack() },
+                    onFavorite = { viewModel.onFavoriteClick(coin) }
+                )
             } else {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text("Moneda nu este disponibilă în cache.", color = Muted)
@@ -238,7 +265,16 @@ fun CryptoCard(coin: CryptoEntity, onClick: () -> Unit, onFavorite: () -> Unit) 
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DetailScreen(coin: CryptoEntity, onBack: () -> Unit, onFavorite: () -> Unit) {
+fun DetailScreen(
+    coin: CryptoEntity,
+    points: List<PricePoint>,
+    chartLoading: Boolean,
+    chartError: String?,
+    selectedDays: Int,
+    onPeriodSelected: (Int) -> Unit,
+    onBack: () -> Unit,
+    onFavorite: () -> Unit
+) {
     Scaffold(
         containerColor = AppBackground,
         topBar = {
@@ -262,25 +298,132 @@ fun DetailScreen(coin: CryptoEntity, onBack: () -> Unit, onFavorite: () -> Unit)
             )
         }
     ) { padding ->
-        Column(Modifier.fillMaxSize().padding(padding).padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            Text(coin.symbol, color = Accent, fontWeight = FontWeight.Bold)
+        Column(
+            Modifier.fillMaxSize().padding(padding).padding(horizontal = 18.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Spacer(Modifier.height(4.dp))
+            Text(coin.symbol.uppercase(), color = Accent, fontWeight = FontWeight.Bold)
             Text(usd(coin.currentPrice), color = Color.White, style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
-            Text(pct(coin.priceChange24h) + " în ultimele 24h", color = changeColor(coin.priceChange24h), style = MaterialTheme.typography.titleMedium)
-            InfoCard("Nume", coin.name)
-            InfoCard("Simbol", coin.symbol)
-            InfoCard("Preț curent", usd(coin.currentPrice))
-            InfoCard("Variație 24h", pct(coin.priceChange24h))
-            Text(if (coin.isFavorite) "Adăugată la favorite" else "Nu este în lista de favorite", color = Muted)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(pct(coin.priceChange24h), color = changeColor(coin.priceChange24h), fontWeight = FontWeight.SemiBold)
+                Text("  în ultimele 24h", color = Muted, style = MaterialTheme.typography.bodySmall)
+            }
+
+            Card(
+                colors = CardDefaults.cardColors(containerColor = CardBackground),
+                shape = RoundedCornerShape(18.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text("Evoluția prețului", color = Color.White, fontWeight = FontWeight.SemiBold)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        PeriodButton("24H", 1, selectedDays, onPeriodSelected, Modifier.weight(1f))
+                        PeriodButton("7D", 7, selectedDays, onPeriodSelected, Modifier.weight(1f))
+                        PeriodButton("30D", 30, selectedDays, onPeriodSelected, Modifier.weight(1f))
+                    }
+                    when {
+                        chartLoading -> Box(Modifier.fillMaxWidth().height(150.dp), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(color = Accent)
+                        }
+                        points.size >= 2 -> PriceChart(points)
+                        chartError != null -> Box(Modifier.fillMaxWidth().height(120.dp), contentAlignment = Alignment.Center) {
+                            Text(chartError, color = Muted, style = MaterialTheme.typography.bodySmall)
+                        }
+                        else -> Box(Modifier.fillMaxWidth().height(120.dp), contentAlignment = Alignment.Center) {
+                            Text("Se încarcă datele graficului...", color = Muted)
+                        }
+                    }
+                    if (points.size >= 2) {
+                        val first = points.first().price
+                        val last = points.last().price
+                        val delta = if (first != 0.0) ((last - first) / first) * 100.0 else 0.0
+                        Text(
+                            "Variație în perioadă: " + pct(delta),
+                            color = changeColor(delta),
+                            style = MaterialTheme.typography.labelMedium
+                        )
+                    }
+                }
+            }
+
+            Text("STATISTICI DE PIAȚĂ", color = Muted, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                StatCard("Market Cap", compactUsd(coin.marketCap), Modifier.weight(1f))
+                StatCard("Rank", coin.marketCapRank?.let { "#$it" } ?: "N/A", Modifier.weight(1f))
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                StatCard("Volum 24h", compactUsd(coin.totalVolume), Modifier.weight(1f))
+                StatCard("Schimbare 24h", coin.priceChange24hAmount?.let { usd(it) } ?: "N/A", Modifier.weight(1f))
+            }
+            Text("INTERVAL 24H", color = Muted, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                StatCard("Minim", coin.low24h?.let { usd(it) } ?: "N/A", Modifier.weight(1f), Green)
+                StatCard("Maxim", coin.high24h?.let { usd(it) } ?: "N/A", Modifier.weight(1f), Red)
+            }
+            Text(
+                if (coin.isFavorite) "★ Salvată la favorite" else "Apasă steluța pentru a salva moneda",
+                color = if (coin.isFavorite) Color(0xFFFFC857) else Muted,
+                style = MaterialTheme.typography.bodySmall
+            )
         }
     }
 }
 
 @Composable
-fun InfoCard(label: String, value: String) {
-    Card(colors = CardDefaults.cardColors(containerColor = CardBackground), shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth()) {
-        Row(Modifier.fillMaxWidth().padding(16.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-            Text(label, color = Muted)
-            Text(value, color = Color.White, fontWeight = FontWeight.SemiBold)
+fun PeriodButton(label: String, days: Int, selectedDays: Int, onSelect: (Int) -> Unit, modifier: Modifier = Modifier) {
+    val selected = days == selectedDays
+    TextButton(
+        onClick = { onSelect(days) },
+        modifier = modifier,
+        colors = ButtonDefaults.textButtonColors(
+            containerColor = if (selected) Accent.copy(alpha = 0.18f) else Color.Transparent,
+            contentColor = if (selected) Accent else Muted
+        )
+    ) {
+        Text(label, fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal)
+    }
+}
+
+@Composable
+fun PriceChart(points: List<PricePoint>) {
+    val prices = points.map { it.price }
+    val minPrice = prices.minOrNull() ?: 0.0
+    val maxPrice = prices.maxOrNull() ?: 0.0
+    val range = (maxPrice - minPrice).takeIf { it > 0.0 } ?: 1.0
+    val lineColor = if (prices.last() >= prices.first()) Green else Red
+
+    Canvas(Modifier.fillMaxWidth().height(150.dp)) {
+        val horizontalPadding = 4.dp.toPx()
+        val verticalPadding = 10.dp.toPx()
+        val usableWidth = size.width - horizontalPadding * 2
+        val usableHeight = size.height - verticalPadding * 2
+        val path = Path()
+        prices.forEachIndexed { index, price ->
+            val x = horizontalPadding + usableWidth * index / (prices.size - 1).toFloat()
+            val y = verticalPadding + usableHeight * (1f - ((price - minPrice) / range).toFloat())
+            if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
+        }
+        drawLine(
+            color = Muted.copy(alpha = 0.22f),
+            start = Offset(0f, size.height - verticalPadding),
+            end = Offset(size.width, size.height - verticalPadding),
+            strokeWidth = 1.dp.toPx()
+        )
+        drawPath(path = path, color = lineColor, style = androidx.compose.ui.graphics.drawscope.Stroke(width = 3.dp.toPx()))
+    }
+}
+
+@Composable
+fun StatCard(label: String, value: String, modifier: Modifier = Modifier, valueColor: Color = Color.White) {
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(containerColor = CardBackground),
+        shape = RoundedCornerShape(14.dp)
+    ) {
+        Column(Modifier.fillMaxWidth().padding(13.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(label, color = Muted, style = MaterialTheme.typography.labelSmall)
+            Text(value, color = valueColor, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium)
         }
     }
 }
