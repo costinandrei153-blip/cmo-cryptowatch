@@ -111,7 +111,6 @@ fun PortfolioScreen(
         val price = coins.firstOrNull { it.id == holding.coinId }?.currentPrice ?: holding.averageBuyPrice
         holding.quantity * price
     }
-    val investedCost = holdings.sumOf { it.quantity * it.averageBuyPrice }
     val pnl = cash + marketValue - 10000.0
     Scaffold(
         containerColor = AppBackground,
