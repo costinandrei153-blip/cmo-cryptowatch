@@ -47,7 +47,7 @@ import ro.cmo.cryptowatch.viewmodel.CryptoViewModel
 import java.util.Locale
 
 val AppBackground = Color(0xFF0B1020)
-private val CardBackground = Color(0xFF151D31)
+val CardBackground = Color(0xFF151D31)
 private val Accent = Color(0xFF86A2FF)
 private val Muted = Color(0xFF9AA7BD)
 private val Green = Color(0xFF31C48D)
