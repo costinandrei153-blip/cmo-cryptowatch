@@ -54,7 +54,7 @@ class CryptoRepository(
         val pricesById = entities.associate { it.id to it.currentPrice }
         val triggered = portfolioDao.getPendingAlerts().mapNotNull { alert ->
             val currentPrice = pricesById[alert.coinId] ?: return@mapNotNull null
-            if (alert.isAbove) currentPrice >= alert.targetPrice else currentPrice <= alert.targetPrice
+            val reached = if (alert.isAbove) currentPrice >= alert.targetPrice else currentPrice <= alert.targetPrice
             if (reached) alert to currentPrice else null
         }
         triggered.forEach { (alert, currentPrice) ->
