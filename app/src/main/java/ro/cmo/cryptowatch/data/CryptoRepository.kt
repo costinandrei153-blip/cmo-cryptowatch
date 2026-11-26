@@ -1,11 +1,13 @@
 package ro.cmo.cryptowatch.data
 
+import android.content.Context
 import androidx.room.withTransaction
 import kotlinx.coroutines.flow.Flow
 import ro.cmo.cryptowatch.network.ApiClient
 import ro.cmo.cryptowatch.network.PricePoint
 
 class CryptoRepository(
+    private val context: Context,
     private val cryptoDao: CryptoDao,
     private val portfolioDao: PortfolioDao
 ) {
@@ -50,13 +52,16 @@ class CryptoRepository(
         cryptoDao.insertCryptos(entities)
 
         val pricesById = entities.associate { it.id to it.currentPrice }
-        val triggered = portfolioDao.getPendingAlerts().filter { alert ->
-            val currentPrice = pricesById[alert.coinId] ?: return@filter false
-            if (alert.isAbove) currentPrice >= alert.targetPrice
-            else currentPrice <= alert.targetPrice
+        val triggered = portfolioDao.getPendingAlerts().mapNotNull { alert ->
+            val currentPrice = pricesById[alert.coinId] ?: return@mapNotNull null
+            if (alert.isAbove) currentPrice >= alert.targetPrice else currentPrice <= alert.targetPrice
+            if (reached) alert to currentPrice else null
         }
-        triggered.forEach { portfolioDao.markAlertTriggered(it.id) }
-        return triggered
+        triggered.forEach { (alert, currentPrice) ->
+            portfolioDao.markAlertTriggered(alert.id)
+            PriceAlertNotifier.show(context, alert, currentPrice)
+        }
+        return triggered.map { it.first }
     }
 
     suspend fun getPriceHistory(coinId: String, days: Int): List<PricePoint> {
