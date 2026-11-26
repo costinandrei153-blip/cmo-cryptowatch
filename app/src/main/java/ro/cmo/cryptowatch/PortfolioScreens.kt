@@ -112,7 +112,7 @@ fun PortfolioScreen(
         holding.quantity * price
     }
     val investedCost = holdings.sumOf { it.quantity * it.averageBuyPrice }
-    val pnl = marketValue - investedCost
+    val pnl = cash + marketValue - 10000.0
     Scaffold(
         containerColor = AppBackground,
         topBar = {
@@ -134,7 +134,7 @@ fun PortfolioScreen(
                         Text(usd(cash + marketValue), color = Color.White, style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
                         Text("Sold disponibil: " + usd(cash), color = Muted)
                         Text("Valoare dețineri: " + usd(marketValue), color = Muted)
-                        Text("Profit / Pierdere nerealizată: " + usd(pnl), color = if (pnl >= 0) Color(0xFF31C48D) else Color(0xFFFF6B75))
+                        Text("Profit / Pierdere totală: " + usd(pnl), color = if (pnl >= 0) Color(0xFF31C48D) else Color(0xFFFF6B75))
                         Text("Capital virtual inițial: $10,000.00", color = Muted, style = MaterialTheme.typography.labelSmall)
                     }
                 }
