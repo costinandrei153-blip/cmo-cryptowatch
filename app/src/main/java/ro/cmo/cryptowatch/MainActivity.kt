@@ -203,13 +203,13 @@ fun HomeScreen(
             Surface(color = CardBackground) {
                 Row(Modifier.fillMaxWidth().padding(8.dp)) {
                     TextButton(onClick = { favoritesOnly = false }, modifier = Modifier.weight(1f)) {
-                        Text("Piață", color = if (!favoritesOnly) Accent else Muted)
+                        Text("Piață", style = MaterialTheme.typography.labelSmall, color = if (!favoritesOnly) Accent else Muted)
                     }
                     TextButton(onClick = { favoritesOnly = true }, modifier = Modifier.weight(1f)) {
-                        Text("Favorite (" + favorites.size + ")", color = if (favoritesOnly) Accent else Muted)
+                        Text("Favorite (" + favorites.size + ")", style = MaterialTheme.typography.labelSmall, color = if (favoritesOnly) Accent else Muted)
                     }
-                    TextButton(onClick = onPortfolio, modifier = Modifier.weight(1f)) { Text("Portofoliu", color = Muted) }
-                    TextButton(onClick = onAlerts, modifier = Modifier.weight(1f)) { Text("Alerte", color = Muted) }
+                    TextButton(onClick = onPortfolio, modifier = Modifier.weight(1f)) { Text("Portofoliu", style = MaterialTheme.typography.labelSmall, color = Muted) }
+                    TextButton(onClick = onAlerts, modifier = Modifier.weight(1f)) { Text("Alerte", style = MaterialTheme.typography.labelSmall, color = Muted) }
                 }
             }
         }
