@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.Canvas
@@ -22,6 +23,7 @@ import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -108,6 +110,15 @@ fun CryptoWatchApp(viewModel: CryptoViewModel) {
     val holdings by viewModel.portfolioHoldings.collectAsState()
     val transactions by viewModel.portfolioTransactions.collectAsState()
     val alerts by viewModel.priceAlerts.collectAsState()
+    val actionMessage by viewModel.actionMessage.collectAsState()
+    val context = LocalContext.current
+
+    LaunchedEffect(actionMessage) {
+        actionMessage?.let {
+            Toast.makeText(context, it, Toast.LENGTH_LONG).show()
+            viewModel.clearActionMessage()
+        }
+    }
 
     NavHost(navController = nav, startDestination = "home") {
         composable("home") {
