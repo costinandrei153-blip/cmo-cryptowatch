@@ -31,7 +31,7 @@ object PriceAlertNotifier {
 
         val direction = if (alert.isAbove) "a urcat peste" else "a scăzut sub"
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setSmallIcon(R.mipmap.ic_launcher)
             .setContentTitle("Alertă de preț: " + alert.coinName)
             .setContentText(alert.coinName + " " + direction + " " + alert.targetPrice + " USD. Preț detectat: " + currentPrice + " USD.")
             .setStyle(NotificationCompat.BigTextStyle().bigText(
