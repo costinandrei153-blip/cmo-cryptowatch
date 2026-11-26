@@ -96,11 +96,16 @@ fun CryptoWatchApp(viewModel: CryptoViewModel) {
     val chartLoading by viewModel.chartLoading.collectAsState()
     val chartError by viewModel.chartError.collectAsState()
     val selectedDays by viewModel.selectedChartDays.collectAsState()
+    val account by viewModel.portfolioAccount.collectAsState()
+    val holdings by viewModel.portfolioHoldings.collectAsState()
+    val transactions by viewModel.portfolioTransactions.collectAsState()
+    val alerts by viewModel.priceAlerts.collectAsState()
 
     NavHost(navController = nav, startDestination = "home") {
         composable("home") {
             HomeScreen(coins, favorites, loading, error, viewModel::refreshData,
-                viewModel::clearError, viewModel::onFavoriteClick, { nav.navigate("detail/$it") })
+                viewModel::clearError, viewModel::onFavoriteClick, { nav.navigate("detail/$it") },
+                { nav.navigate("portfolio") }, { nav.navigate("alerts") })
         }
         composable("detail/{coinId}", arguments = listOf(navArgument("coinId") { type = NavType.StringType })) { entry ->
             val coin = coins.firstOrNull { it.id == entry.arguments?.getString("coinId") }
@@ -114,13 +119,25 @@ fun CryptoWatchApp(viewModel: CryptoViewModel) {
                     selectedDays = selectedDays,
                     onPeriodSelected = { days -> viewModel.loadPriceHistory(coin.id, days) },
                     onBack = { nav.popBackStack() },
-                    onFavorite = { viewModel.onFavoriteClick(coin) }
+                    onFavorite = { viewModel.onFavoriteClick(coin) },
+                    onBuy = { viewModel.buy(coin, it) },
+                    onSell = { viewModel.sell(coin, it) },
+                    onCreateAlert = { target, above -> viewModel.addAlert(coin, target, above) },
+                    holding = holdings.firstOrNull { it.coinId == coin.id }
                 )
             } else {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text("Moneda nu este disponibilă în cache.", color = Muted)
                 }
             }
+        }
+        composable("portfolio") {
+            PortfolioScreen(account, holdings, transactions, coins, { nav.popBackStack() }) {
+                nav.navigate("detail/$it")
+            }
+        }
+        composable("alerts") {
+            AlertsScreen(alerts, { nav.popBackStack() }, viewModel::deleteAlert)
         }
     }
 }
@@ -135,7 +152,9 @@ fun HomeScreen(
     onRefresh: () -> Unit,
     onDismissError: () -> Unit,
     onFavorite: (CryptoEntity) -> Unit,
-    onOpen: (String) -> Unit
+    onOpen: (String) -> Unit,
+    onPortfolio: () -> Unit,
+    onAlerts: () -> Unit
 ) {
     var query by rememberSaveable { mutableStateOf("") }
     var favoritesOnly by rememberSaveable { mutableStateOf(false) }
@@ -170,6 +189,8 @@ fun HomeScreen(
                     TextButton(onClick = { favoritesOnly = true }, modifier = Modifier.weight(1f)) {
                         Text("Favorite (" + favorites.size + ")", color = if (favoritesOnly) Accent else Muted)
                     }
+                    TextButton(onClick = onPortfolio, modifier = Modifier.weight(1f)) { Text("Portofoliu", color = Muted) }
+                    TextButton(onClick = onAlerts, modifier = Modifier.weight(1f)) { Text("Alerte", color = Muted) }
                 }
             }
         }
@@ -273,8 +294,14 @@ fun DetailScreen(
     selectedDays: Int,
     onPeriodSelected: (Int) -> Unit,
     onBack: () -> Unit,
-    onFavorite: () -> Unit
+    onFavorite: () -> Unit,
+    onBuy: (Double) -> Unit,
+    onSell: (Double) -> Unit,
+    onCreateAlert: (Double, Boolean) -> Unit,
+    holding: ro.cmo.cryptowatch.data.PortfolioHoldingEntity?
 ) {
+    var tradeDialog by remember { mutableStateOf(false) }
+    var alertDialog by remember { mutableStateOf(false) }
     Scaffold(
         containerColor = AppBackground,
         topBar = {
@@ -366,8 +393,16 @@ fun DetailScreen(
                 color = if (coin.isFavorite) Color(0xFFFFC857) else Muted,
                 style = MaterialTheme.typography.bodySmall
             )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = { tradeDialog = true }, modifier = Modifier.weight(1f)) { Text("Cumpără / Vinde") }
+                OutlinedButton(onClick = { alertDialog = true }, modifier = Modifier.weight(1f)) { Text("Setează alertă") }
+            }
         }
     }
+    if (tradeDialog) TradeDialog(coin, holding, { tradeDialog = false },
+        { onBuy(it); tradeDialog = false }, { onSell(it); tradeDialog = false })
+    if (alertDialog) PriceAlertDialog(coin, { alertDialog = false },
+        { value, above -> onCreateAlert(value, above); alertDialog = false })
 }
 
 @Composable
@@ -424,6 +459,131 @@ fun StatCard(label: String, value: String, modifier: Modifier = Modifier, valueC
         Column(Modifier.fillMaxWidth().padding(13.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(label, color = Muted, style = MaterialTheme.typography.labelSmall)
             Text(value, color = valueColor, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium)
+        }
+    }
+}
+
+
+@Composable
+fun TradeDialog(coin: CryptoEntity, holding: ro.cmo.cryptowatch.data.PortfolioHoldingEntity?, onDismiss: () -> Unit, onBuy: (Double) -> Unit, onSell: (Double) -> Unit) {
+    var buyMode by remember { mutableStateOf(true) }
+    var amount by remember { mutableStateOf("") }
+    AlertDialog(onDismissRequest = onDismiss, title = { Text(if (buyMode) "Cumpără " + coin.symbol else "Vinde " + coin.symbol) },
+        text = {
+            Column {
+                Row {
+                    TextButton(onClick = { buyMode = true; amount = "" }) { Text("Cumpără") }
+                    TextButton(onClick = { buyMode = false; amount = "" }) { Text("Vinde") }
+                }
+                Text("Preț: " + usd(coin.currentPrice))
+                Text("Deții: " + (holding?.quantity ?: 0.0) + " " + coin.symbol)
+                OutlinedTextField(amount, { amount = it }, label = { Text(if (buyMode) "Sumă USD" else "Cantitate") }, singleLine = true)
+            }
+        },
+        confirmButton = { TextButton(onClick = {
+            val value = amount.replace(',', '.').toDoubleOrNull()
+            if (value != null && value > 0) { if (buyMode) onBuy(value) else onSell(value) }
+        }) { Text("Confirmă") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Anulează") } }
+    )
+}
+
+@Composable
+fun PriceAlertDialog(coin: CryptoEntity, onDismiss: () -> Unit, onSave: (Double, Boolean) -> Unit) {
+    var target by remember { mutableStateOf("") }
+    var above by remember { mutableStateOf(true) }
+    AlertDialog(onDismissRequest = onDismiss, title = { Text("Alertă " + coin.symbol) },
+        text = {
+            Column {
+                Text("Preț curent: " + usd(coin.currentPrice))
+                OutlinedTextField(target, { target = it }, label = { Text("Preț țintă USD") }, singleLine = true)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(above, { above = true }); Text("Peste")
+                }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    RadioButton(!above, { above = false }); Text("Sub")
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = {
+            val value = target.replace(',', '.').toDoubleOrNull()
+            if (value != null && value > 0) onSave(value, above)
+        }) { Text("Salvează") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Anulează") } }
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun PortfolioScreen(account: ro.cmo.cryptowatch.data.PortfolioAccountEntity?, holdings: List<ro.cmo.cryptowatch.data.PortfolioHoldingEntity>, transactions: List<ro.cmo.cryptowatch.data.PortfolioTransactionEntity>, coins: List<CryptoEntity>, onBack: () -> Unit, onOpenCoin: (String) -> Unit) {
+    val cash = account?.cashBalance ?: 10000.0
+    val marketValue = holdings.sumOf { h -> h.quantity * (coins.firstOrNull { it.id == h.coinId }?.currentPrice ?: h.averageBuyPrice) }
+    val cost = holdings.sumOf { it.quantity * it.averageBuyPrice }
+    val pnl = marketValue - cost
+    Scaffold(containerColor = AppBackground, topBar = {
+        TopAppBar(title = { Text("Portofoliul meu", color = Color.White) }, navigationIcon = {
+            IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Înapoi", tint = Color.White) }
+        }, colors = TopAppBarDefaults.topAppBarColors(containerColor = AppBackground))
+    }) { padding ->
+        LazyColumn(Modifier.fillMaxSize().padding(padding).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            item {
+                Card(colors = CardDefaults.cardColors(containerColor = CardBackground)) {
+                    Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(7.dp)) {
+                        Text("VALOARE TOTALĂ", color = Muted)
+                        Text(usd(cash + marketValue), color = Color.White, style = MaterialTheme.typography.headlineMedium)
+                        Text("Sold disponibil: " + usd(cash), color = Muted)
+                        Text("Valoare dețineri: " + usd(marketValue), color = Muted)
+                        Text("Profit / Pierdere nerealizată: " + usd(pnl), color = changeColor(pnl))
+                        Text("Capital virtual inițial: $10,000.00", color = Muted)
+                    }
+                }
+            }
+            item { Text("DEȚINERI", color = Muted, fontWeight = FontWeight.Bold) }
+            if (holdings.isEmpty()) item { Text("Nu ai cumpărat încă nicio criptomonedă.", color = Muted) }
+            items(holdings, key = { it.coinId }) { h ->
+                val price = coins.firstOrNull { it.id == h.coinId }?.currentPrice ?: h.averageBuyPrice
+                Card(Modifier.fillMaxWidth().clickable { onOpenCoin(h.coinId) }, colors = CardDefaults.cardColors(containerColor = CardBackground)) {
+                    Row(Modifier.fillMaxWidth().padding(14.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                        Column { Text(h.coinName, color = Color.White); Text(String.format(Locale.US, "%.6f", h.quantity) + " " + h.symbol, color = Muted) }
+                        Text(usd(h.quantity * price), color = Color.White)
+                    }
+                }
+            }
+            item { Text("TRANZACȚII RECENTE", color = Muted, fontWeight = FontWeight.Bold) }
+            if (transactions.isEmpty()) item { Text("Tranzacțiile vor apărea aici.", color = Muted) }
+            items(transactions, key = { it.id }) { t ->
+                Row(Modifier.fillMaxWidth().padding(vertical = 5.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                    Text(t.type + " • " + t.coinName, color = if (t.type == "BUY") Red else Green)
+                    Text(usd(t.total), color = Color.White)
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AlertsScreen(alerts: List<ro.cmo.cryptowatch.data.PriceAlertEntity>, onBack: () -> Unit, onDelete: (Long) -> Unit) {
+    Scaffold(containerColor = AppBackground, topBar = {
+        TopAppBar(title = { Text("Alerte de preț", color = Color.White) }, navigationIcon = {
+            IconButton(onClick = onBack) { Icon(Icons.Default.ArrowBack, "Înapoi", tint = Color.White) }
+        }, colors = TopAppBarDefaults.topAppBarColors(containerColor = AppBackground))
+    }) { padding ->
+        if (alerts.isEmpty()) Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+            Text("Nu ai alerte configurate.", color = Muted)
+        } else LazyColumn(Modifier.fillMaxSize().padding(padding).padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            items(alerts, key = { it.id }) { a ->
+                Card(colors = CardDefaults.cardColors(containerColor = CardBackground)) {
+                    Row(Modifier.fillMaxWidth().padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(a.coinName + " (" + a.symbol + ")", color = Color.White)
+                            Text((if (a.isAbove) "Peste " else "Sub ") + usd(a.targetPrice), color = Muted)
+                            Text(if (a.isTriggered) "Declanșată" else if (a.isActive) "Activă" else "Inactivă", color = if (a.isTriggered) Green else Muted)
+                        }
+                        TextButton(onClick = { onDelete(a.id) }) { Text("Șterge", color = Red) }
+                    }
+                }
+            }
         }
     }
 }
